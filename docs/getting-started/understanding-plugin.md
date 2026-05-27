@@ -1,100 +1,116 @@
-# Understanding How Plugins Work
+<!DOCTYPE html>
+<html lang="mg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Andrana Lalao Domino</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        #table {
+            background-color: #27ae60;
+            border: 5px solid #1e824c;
+            border-radius: 10px;
+            min-height: 120px;
+            margin: 20px auto;
+            max-width: 500px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+        }
+        .domino {
+            background-color: white;
+            color: black;
+            border: 2px solid #333;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-weight: bold;
+            font-size: 20px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        #hand {
+            margin-top: 30px;
+        }
+        #status {
+            font-size: 18px;
+            color: #f1c40f;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
 
-This page is the practical mental model for writing Acode plugins: what Acode does, what your plugin must do, and what happens during load/unload.
+    <h1>Dika Tsotra: Fitsipika Domino</h1>
+    <p>Kitiho ny domino eny an-tananao mba hametrahana azy eo amin'ny latabatra maitso.</p>
 
-## The Plugin Contract
+    <h3>Ny Latabatra (Table):</h3>
+    <div id="table">
+        <div class="domino" id="domino-fixe">3 | 4</div>
+    </div>
 
-From Acode's perspective, your plugin is:
+    <h3>Ny Tananao (Hand):</h3>
+    <div id="hand">
+        <div class="domino" onclick="milalao(4, 5, this)">4 | 5</div>
+        <div class="domino" onclick="milalao(1, 2, this)">1 | 2</div>
+        <div class="domino" onclick="milalao(3, 6, this)">3 | 6</div>
+    </div>
 
-1. A folder in `PLUGIN_DIR`
-2. A `plugin.json`
-3. An entry script (usually `main.js`)
+    <div id="status">Andrasana ny fihetsikao...</div>
 
-From your perspective, your script should register:
+    <script>
+        // Ny laharan'ny domino eo amin'ny latabatra amin'izao (3 sy 4)
+        // Ny sisiny havia dia 3, ny sisiny havanana dia 4
+        let sisinyHavia = 3;
+        let sisinyHavanana = 4;
 
-- `acode.setPluginInit(pluginId, initFn)`
-- `acode.setPluginUnmount(pluginId, unmountFn)` (strongly recommended)
+        function milalao(laharanaA, laharanaB, fitaovana) {
+            let statusDiv = document.getElementById('status');
+            let tableDiv = document.getElementById('table');
 
-If you skip `setPluginInit`, your script may load, but your plugin logic will not run through Acode's lifecycle.
+            // Fanamarinana: Mifanaraka amin'ny sisiny havanana ve ilay domino kilihina?
+            if (laharanaA === sisinyHavanana) {
+                // Manova ny laharan'ny sisiny havanana vaovao
+                sisinyHavanana = laharanaB;
+                
+                // Mamorona domino vaovao eo amin'ny latabatra
+                let dominoVaovao = document.createElement('div');
+                dominoVaovao.className = 'domino';
+                dominoVaovao.innerText = laharanaA + " | " + laharanaB;
+                tableDiv.appendChild(dominoVaovao);
 
-## Lifecycle In One View
+                // Fafana eny an-tanana ilay domino efa nilalaovana
+                fitaovana.style.display = 'none';
+                statusDiv.innerText = "Mety tsara! Nifindra ho " + sisinyHavanana + " ny sisiny havanana.";
+                statusDiv.style.color = "#2ecc71";
+            } 
+            // Fanamarinana faharoa: Raha mivadika ilay domino (ohatra: 3 sy 6 mifanaraka amin'ny sisiny havia)
+            else if (laharanaA === sisinyHavia) {
+                sisinyHavia = laharanaB;
+                
+                let dominoVaovao = document.createElement('div');
+                dominoVaovao.className = 'domino';
+                dominoVaovao.innerText = laharanaB + " | " + laharanaA;
+                // Apetraka eo aloha (havia)
+                tableDiv.insertBefore(dominoVaovao, tableDiv.firstChild);
 
-1. Acode discovers plugin folders.
-2. It decides which plugins to load (enabled, not broken, not already loaded).
-3. It loads your entry script.
-4. It calls your registered `init` with runtime context.
-5. Later, on disable/uninstall/reload, it calls your registered `unmount`.
-
-## What You Get In `init`
-
-Your init function receives:
-
-- `baseUrl`: internal base URL to your plugin files
-- `$page`: a plugin page object for UI screens
-- `cache`: object with:
-  - `cacheFileUrl`
-  - `cacheFile`
-  - `firstInit`
-  - `ctx`
-
-Use `firstInit` for one-time setup or migration.
-
-## Recommended `main.js` Shape
-
-```js
-import plugin from "../plugin.json";
-
-function init(baseUrl, $page, cache) {
-  const commands = acode.require("commands");
-
-  commands.addCommand({
-    name: "example.open",
-    description: "Open Example Panel",
-    exec: () => {
-      $page.innerHTML = "<h2>Example Plugin</h2>";
-      $page.show();
-    },
-  });
-}
-
-function unmount() {
-  const commands = acode.require("commands");
-  commands.removeCommand("example.open");
-}
-
-acode.setPluginInit(plugin.id, init);
-acode.setPluginUnmount(plugin.id, unmount);
-```
-
-## What Happens On Disable / Enable / Uninstall
-
-- Disable:
-  - Acode calls `acode.unmountPlugin(id)` which triggers your unmount.
-  - Plugin runtime state is cleared (including plugin cache file).
-- Enable:
-  - Acode loads the plugin again and runs init again.
-- Uninstall:
-  - Plugin files are removed.
-  - Acode runs unmount cleanup for loaded resources.
-
-Treat `init` as repeatable and `unmount` as mandatory cleanup.
-
-## Failure Behavior You Should Know
-
-If your plugin throws during load/init:
-
-- it is marked as broken for the session flow,
-- Acode skips loading it again until user/action retries it.
-
-For programmatic recovery:
-
-```js
-acode.clearBrokenPluginMark("com.example.plugin");
-```
-
-## Author Guidelines
-
-- Keep `init` fast; do heavy work lazily.
-- Register commands through `acode.require("commands")`.
-- Always remove listeners, commands, intervals, and UI hooks in `unmount`.
-- Avoid storing important state only in memory; use cache/settings when needed.
+                fitaovana.style.display = 'none';
+                statusDiv.innerText = "Mety tsara! Nifindra ho " + sisinyHavia + " ny sisiny havia.";
+                statusDiv.style.color = "#2ecc71";
+            }
+            else {
+                // Raha tsy mifanaraka ny laharana
+                statusDiv.innerText = "Tsy mety io! Tsy mifanaraka ny laharana (" + laharanaA + "|" + laharanaB + ") amin'ny eo amin'ny latabatra.";
+                statusDiv.style.color = "#e74c3c";
+            }
+        }
+    </script>
+</body>
+</html>
